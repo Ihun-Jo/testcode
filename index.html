@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Spectrum</title>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <style>
+        /* 기존 스타일 유지 */
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 0px;
+            z-index: 10; /* 다른 요소보다 위에 표시 */
+        }
+
+        label, input {
+            display: block;
+            margin-bottom: 10px;
+            margin-top: 20px;
+        }
+        .color-sliders {
+            margin-top: 20px;
+            margin-bottom: 50px;
+        }
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .slider-labels span {
+            font-size: 12px;
+        }
+
+        #randomPointBtn, #addPointBtn {
+            background-color:#0a0a23;
+            color: #fff;
+            padding: 10px;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+            border-radius: 5px;
+        }
+
+        /* 공통 슬라이더 스타일 */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 2px;
+            border-radius: 5px;
+            background: black;
+            outline: none;
+            opacity: 1;
+            transition: opacity .15s ease-in-out;
+        }
+
+        input[type="range"]:hover {
+            opacity: 1;
+        }
+
+        /* 트랙 스타일링 */
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 3px;
+            background: black;
+            border-radius: 5px;
+            border: none;
+        }
+
+        /* 핸들(썸) 스타일링 */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: black;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb {
+            background: gray;
+        }
+
+        /* 파이어폭스용 핸들 스타일 */
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4CAF50;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+        }
+
+        /* 파이어폭스용 트랙 스타일 */
+        input[type="range"]::-moz-range-track {
+            background: #ddd;
+            height: 8px;
+            border-radius: 5px;
+        }
+
+        /* 상태 메시지 스타일 */
+        #updateStatus {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+<button id="signin-button" style="display: none;">Sign in</button>
+<button id="signout-button" style="display: none;">Sign out</button>
+
+<div class="controls">
+    <!-- 슬라이더들 유지 -->
+
+    <button id="addPointBtn">Add Point</button>
+    <button id="randomPointBtn">Random Point</button> <!-- 랜덤 버튼 유지 -->
+
+    <!-- 상태 메시지 추가 -->
+    <p id="updateStatus">데이터 업데이트 대기 중...</p>
+</div>
+
+<!-- Three.js 및 OrbitControls 스크립트 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+    // 1. Scene 생성
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000); // 검은 배경
+
+    // 2. Camera 생성 (Perspective Camera)
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(6, 6, 6); // 카메라 위치 조정
+
+    // 3. Renderer 생성
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // 4. OrbitControls 추가 (마우스로 회전/확대/이동 가능)
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // 5. X, Y, Z 축 표시하기 (음수 방향으로도 연장)
+    const axesLength = 5;
+
+    function createAxis(start, end, color) {
+        const material = new THREE.LineBasicMaterial({ color });
+        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+        const line = new THREE.Line(geometry, material);
+        scene.add(line);
+    }
+
+    // X axis (red)
+    createAxis(new THREE.Vector3(-axesLength, 0, 0), new THREE.Vector3(axesLength, 0, 0), 0xff0000);
+    // Y axis (green)
+    createAxis(new THREE.Vector3(0, -axesLength, 0), new THREE.Vector3(0, axesLength, 0), 0x00ff00);
+    // Z axis (blue)
+    createAxis(new THREE.Vector3(0, 0, -axesLength), new THREE.Vector3(0, 0, axesLength), 0x0000ff);
+
+    // 6. Light 추가
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 5, 5).normalize();
+    scene.add(light);
+
+    // 7. 점 추가 함수
+    function addPoint(x, y, z, size, r, g, b) {
+        const geometry = new THREE.SphereGeometry(size / 10, 32, 32);  // 점의 크기 조정
+        const material = new THREE.MeshBasicMaterial({ color: new THREE.Color(`rgb(${r}, ${g}, ${b})`) });
+        const point = new THREE.Mesh(geometry, material);
+        point.position.set(x, y, z);
+        scene.add(point);
+        return point; // 추가된 점을 반환
+    }
+
+    // 8. 윈도우 리사이즈 대응
+    window.addEventListener('resize', () => {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+    });
+
+    // 9. 슬라이더 및 버튼 이벤트 처리
+    const addPointBtn = document.getElementById('addPointBtn');
+    const randomPointBtn = document.getElementById('randomPointBtn');
+    const updateStatus = document.getElementById('updateStatus');
+
+    // 현재 씬에 추가된 점을 추적하기 위한 Map (ID를 키로 사용)
+    const pointsMap = new Map();
+
+    // Google Sheets API 설정
+    const SHEET_ID = '1HeeiPkdKwxBlJQvchJ8erj9jzA1mcURsfCEf3SoN2yc';
+    const RANGE = '시트1!B:H';  // 시트의 범위를 지정합니다
+
+    async function fetchAndUpdatePoints() {
+        try {
+            updateStatus.innerText = '데이터 가져오는 중...';
+
+            const response = await gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: RANGE
+            });
+
+            const data = response.result.values;
+
+            const newIDs = new Set();
+
+            data.forEach(row => {
+                const id = row[0];
+                newIDs.add(id);
+
+                if (!pointsMap.has(id)) {
+                    const x = parseFloat(row[1]);
+                    const y = parseFloat(row[2]);
+                    const z = parseFloat(row[3]);
+                    const size = parseFloat(row[4]);
+                    const r = parseInt(row[5]);
+                    const g = parseInt(row[6]);
+                    const b = parseInt(row[7]);
+
+                    const point = addPoint(x, y, z, size, r, g, b);
+                    pointsMap.set(id, point);
+                } else {
+                    const point = pointsMap.get(id);
+                    const newX = parseFloat(row[1]);
+                    const newY = parseFloat(row[2]);
+                    const newZ = parseFloat(row[3]);
+                    const newSize = parseFloat(row[4]);
+                    const newR = parseInt(row[5]);
+                    const newG = parseInt(row[6]);
+                    const newB = parseInt(row[7]);
+
+                    // 점의 위치와 색상을 업데이트
+                    point.position.set(newX, newY, newZ);
+                    point.material.color.setRGB(newR / 255, newG / 255, newB / 255);
+                }
+            });
+
+            // 삭제된 점 처리
+            pointsMap.forEach((point, id) => {
+                if (!newIDs.has(id)) {
+                    scene.remove(point);
+                    pointsMap.delete(id);
+                }
+            });
+
+            updateStatus.innerText = '데이터가 성공적으로 업데이트되었습니다.';
+        } catch (error) {
+            console.error('Error fetching data: ', error);
+            updateStatus.innerText = '데이터를 가져오는 중 오류가 발생했습니다.';
+        }
+    }
+
+    // 초기화 및 Google API 로드
+    function initClient() {
+        gapi.client.init({
+            apiKey: 'AIzaSyDTkW-nPTdqkwgu1PzkSz9z1Pb5qMNSg9k', // API 키 추가
+            discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+            clientId: '323921589791-s0u2eo3inkpurk7kf2bamj25tlrp13cd.apps.googleusercontent.comD', // 클라이언트 ID 추가
+            scope: "https://www.googleapis.com/auth/spreadsheets.readonly" // 필요한 범위 설정
+        }).then(() => {
+            document.getElementById('signin-button').style.display = 'block';
+            document.getElementById('signout-button').style.display = 'block';
+
+            document.getElementById('signin-button').onclick = () => gapi.auth2.getAuthInstance().signIn();
+            document.getElementById('signout-button').onclick = () => gapi.auth2.getAuthInstance().signOut();
+
+            fetchAndUpdatePoints(); // 데이터 가져오기 호출
+            setInterval(fetchAndUpdatePoints, 5000); // 5초마다 데이터 업데이트
+        }).catch(error => {
+            console.error('Error initializing Google API client: ', error);
+        });
+    }
+
+    // Google API 로드
+    function handleClientLoad() {
+        gapi.load("client:auth2", initClient);
+    }
+
+    // 애니메이션 루프
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update(); // 컨트롤 업데이트
+        renderer.render(scene, camera);
+    }
+
+    // 이벤트 리스너
+    addPointBtn.addEventListener('click', () => {
+        const randomX = Math.random() * 10 - 5; // X축 랜덤
+        const randomY = Math.random() * 10 - 5; // Y축 랜덤
+        const randomZ = Math.random() * 10 - 5; // Z축 랜덤
+        const randomSize = Math.random() * 2 + 0.5; // 크기 랜덤
+        const randomR = Math.floor(Math.random() * 256);
+        const randomG = Math.floor(Math.random() * 256);
+        const randomB = Math.floor(Math.random() * 256);
+
+        const id = `point-${Date.now()}`; // 고유한 ID 생성
+        const point = addPoint(randomX, randomY, randomZ, randomSize, randomR, randomG, randomB);
+        pointsMap.set(id, point); // 점을 Map에 저장
+    });
+
+    randomPointBtn.addEventListener('click', () => {
+        fetchAndUpdatePoints(); // 데이터 가져오기 호출
+    });
+
+    // 애니메이션 루프 시작
+    animate();
+    handleClientLoad(); // Google API 클라이언트 로드 시작
+</script>
+</body>
+</html>
